@@ -1,0 +1,9 @@
+[submodule "android/app/src/main/cpp/llama.cpp"]
+	path = android/app/src/main/cpp/llama.cpp
+	url = https://github.com/ggerganov/llama.cpp.git
+[submodule "android/app/src/main/cpp/CLBlast"]
+	path = android/app/src/main/cpp/CLBlast
+	url = https://github.com/CNugteren/CLBlast.git
+[submodule "llama.cpp"]
+	path = llama.cpp
+	url = https://github.com/ggerganov/llama.cpp.git
