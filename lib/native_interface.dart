@@ -2,22 +2,22 @@ import 'dart:async';
 import 'dart:isolate';
 import 'dart:typed_data';
 import 'dart:ui';
+import 'dart:ffi' as ffi;
+import 'dart:convert' show utf8;
+import 'dart:io' show Directory, File, Platform;
 
 import 'package:ffi/ffi.dart';
 import 'package:flutter/material.dart';
-import 'dart:ffi' as ffi;
-import 'dart:convert' show utf8;
-import 'dart:io' show Platform;
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
-import 'package:file_picker/file_picker.dart';
+import 'package:filesystem_picker/filesystem_picker.dart';
 
 typedef HelloFuncNative = ffi.Pointer<Utf8> Function();
 typedef HelloFunc = ffi.Pointer<Utf8> Function();
 
 // cpp function: int llamacpp_init(char* model_path);
-typedef LlamacppInitFuncNative = ffi.Int Function( ffi.Pointer<Utf8>);
-typedef LlamacppInitFunc = int Function(ffi.Pointer<Utf8>);
+typedef LlamacppInitFuncNative = ffi.Int Function( ffi.Pointer<Utf8>, ffi.Float, ffi.Float);
+typedef LlamacppInitFunc = int Function(ffi.Pointer<Utf8>, double, double);
 // cpp function: int llamacpp_generate(char* prompt, char* output);
 typedef CallbackType = ffi.Int32 Function(ffi.Pointer<Utf8>, ffi.Int32);
 typedef LlamacppGenerateFuncNative = ffi.Int Function( ffi.Pointer<Utf8>, ffi.Int, ffi.Pointer<Utf8>, ffi.Int, ffi.Pointer<ffi.NativeFunction<CallbackType>>);
@@ -28,12 +28,16 @@ typedef LlamacppDeinitFunc = int Function();
 
 class _GenerateIsolateArgs {
   final String prompt;
+  final double topP;
+  final double temperature;
+  final int token;
   final SendPort sendPort;
 
-  _GenerateIsolateArgs(this.prompt, this.sendPort);
+  _GenerateIsolateArgs(this.prompt, this.topP, this.temperature, this.token, this.sendPort);
 }
 
 class llamacpp_native{
+  final int _maxToken = 64;
   
   static final dylib = ffi.DynamicLibrary.open(
     'libllamacpp${Platform.isWindows ? '.dll' : '.so'}',
@@ -51,33 +55,13 @@ class llamacpp_native{
   static final dl_llamacpp_generate = dylib.lookupFunction<LlamacppGenerateFuncNative, LlamacppGenerateFunc >('llamacpp_generate');
   static final dl_llamacpp_deinit = dylib.lookupFunction<LlamacppDeinitFuncNative, LlamacppDeinitFunc >('llamacpp_deinit');
 
-  Future<String?> pickGGUFFile() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.any,
-      // allowedExtensions: ['gguf'],
-    );
-    if (result == null) {
-      // 用户取消了选择
-      return null;
-    }
-    return result.files.single.path;
-  }
 
-  Future<int> modelInit() async {
-    // final filePath = "/data/user/0/com.example.flutter_llamacpp_android/cache/file_picker/ggml-model-f16_q4_0.gguf";
-    final filePath = await pickGGUFFile();
-    if (filePath != null) {
-      print('Selected file: $filePath');
-    } else {
-      print('No file selected.');
-      return -1;
-    }
-    
+  Future<int> modelInit(String modelPath, topP, temperature) async {
     //第1步: 默认执行环境下是rootIsolate，所以创建的是一个rootIsolateReceivePort
     ReceivePort rootIsolateReceivePort = ReceivePort();
     //第2步: 获取rootIsolateSendPort
     SendPort rootIsolateSendPort = rootIsolateReceivePort.sendPort;
-    Isolate newIsolate = await Isolate.spawn(_initIsolateEntryPoint, _GenerateIsolateArgs(filePath.toString(), rootIsolateSendPort));
+    Isolate newIsolate = await Isolate.spawn(_initIsolateEntryPoint, _GenerateIsolateArgs(modelPath, 0, 0, _maxToken, rootIsolateSendPort));
     final message = await rootIsolateReceivePort.first;
     print('Received message: $message[1]');
     return message[0];
@@ -88,13 +72,13 @@ class llamacpp_native{
     ReceivePort rootIsolateReceivePort = ReceivePort();
     //第2步: 获取rootIsolateSendPort
     SendPort rootIsolateSendPort = rootIsolateReceivePort.sendPort;
-    Isolate newIsolate = await Isolate.spawn(_deinitIsolateEntryPoint, _GenerateIsolateArgs('', rootIsolateSendPort)); 
+    Isolate newIsolate = await Isolate.spawn(_deinitIsolateEntryPoint, _GenerateIsolateArgs('', 0, 0, 0, rootIsolateSendPort)); 
     final message = await rootIsolateReceivePort.first;
     print('Received message: $message[1]');
     return message[0];
   }
 
-  Future<void> modelGenerate(String prompt, Function callback) async {
+  Future<void> modelGenerate(String prompt, int maxToken, Function callback) async {
 
     Completer<void> completer = Completer<void>();
     //第1步: 默认执行环境下是rootIsolate，所以创建的是一个rootIsolateReceivePort
@@ -117,7 +101,7 @@ class llamacpp_native{
     });
 
     //第3步: 创建一个newIsolate实例，并把rootIsolateSendPort作为参数传入到newIsolate中，为的是让newIsolate中持有rootIsolateSendPort, 这样在newIsolate中就能向rootIsolate发送消息了
-    Isolate newIsolate = await Isolate.spawn(_generateIsolateEntryPoint, _GenerateIsolateArgs(prompt, rootIsolateSendPort)); // 在新线程中执行_generateIsolateEntryPoint函数，并将参数传递给新线程
+    Isolate newIsolate = await Isolate.spawn(_generateIsolateEntryPoint, _GenerateIsolateArgs(prompt, 0, 0, maxToken, rootIsolateSendPort)); // 在新线程中执行_generateIsolateEntryPoint函数，并将参数传递给新线程
     // 等待新线程执行完毕
     await completer.future;
     // 取消订阅
@@ -137,7 +121,7 @@ class llamacpp_native{
   }
 
   void _initIsolateEntryPoint(_GenerateIsolateArgs args) async {
-    final ret = dl_llamacpp_init(args.prompt.toNativeUtf8());
+    final ret = dl_llamacpp_init(args.prompt.toNativeUtf8(), args.topP, args.temperature);
     if (ret != 0) {
       print('llamacpp_init failed');
       args.sendPort.send([ret, 'llamacpp_init failed']);
@@ -166,7 +150,7 @@ class llamacpp_native{
     __newIsolateSendPort = newIsolateReceivePort.sendPort;
     
     final output = malloc.allocate<Utf8>(256);
-    final output_len = dl_llamacpp_generate(args.prompt.toNativeUtf8(), args.prompt.length, output, 32, ffi.Pointer.fromFunction(_flushCallback, 0));
+    final output_len = dl_llamacpp_generate(args.prompt.toNativeUtf8(), args.prompt.length, output, args.token, ffi.Pointer.fromFunction(_flushCallback, 0));
     final output_str = output.toDartString();
     malloc.free(output);
     // 发送消息给rootIsolate， 表示newIsolate执行完毕

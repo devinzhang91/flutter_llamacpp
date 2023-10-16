@@ -11,7 +11,7 @@ import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import 'native_interface.dart';
-
+import 'gpt_params_dialog.dart';
 
 void main() {
 
@@ -67,6 +67,7 @@ class _ChatRoomState extends State<ChatRoom> with WidgetsBindingObserver {
   final List<ChatMessage> _messages = <ChatMessage>[];
   bool _isSubmitButtonDisabled = false;
   bool _isModelLoaded = false;
+  int _maxToken = 64;
 
   void _flushModelGenerateCallback(String text) {
     setState(() {
@@ -83,7 +84,7 @@ class _ChatRoomState extends State<ChatRoom> with WidgetsBindingObserver {
       _messages.insert(0, const ChatMessage(role: 'bot', text: ''));
       print('_messages insert done');
     });
-    await llamacpp_native().modelGenerate(text, _flushModelGenerateCallback);
+    await llamacpp_native().modelGenerate(text, _maxToken, _flushModelGenerateCallback);
     print('model_generate done');
     setState(() {
       _isSubmitButtonDisabled = false;
@@ -145,9 +146,26 @@ class _ChatRoomState extends State<ChatRoom> with WidgetsBindingObserver {
         actions: [
           IconButton(
             icon: const Icon(Icons.settings),
-            onPressed: _isModelLoaded? null: (){
+            onPressed: _isModelLoaded? null: () async {
+              double _topP = 0.9;
+              double _temperature = 0.1;
+              String _modelPath = '';
+              await showDialog(
+                context: context,
+                builder: (context) {
+                  return GPTParamsDialog(
+                    onLoaded: (topP, temperature, token, modelPath) => {
+                      print('onLoaded'),
+                      _topP = topP,
+                      _temperature = temperature,
+                      _maxToken = token,
+                      _modelPath = modelPath,
+                    },
+                  );
+                },
+              );
               // 在这里执行初始化操作
-              Future<int> ret = llamacpp_native().modelInit();
+              Future<int> ret = llamacpp_native().modelInit(_modelPath, _topP, _temperature);
               _showLoadingDialog();
               ret.then((value) => {
                 Navigator.of(context).pop(),
@@ -293,18 +311,6 @@ class _ChatRoomState extends State<ChatRoom> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    // // 在这里执行初始化操作
-    // Future<int> ret = llamacpp_native().modelInit();
-    // // _showLoadingDialog();
-    // ret.then((value) => {
-    //   // Navigator.of(context).pop(),
-    //   if (value == 0) {
-    //     _showDialog('成功', '模型加载成功')
-    //   } else {
-    //     _showDialog('失败', '模型加载失败'),
-    //     _exitApp()
-    //   }
-    // });
 
   }
 

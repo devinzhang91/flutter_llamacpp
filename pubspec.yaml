@@ -50,7 +50,7 @@ dev_dependencies:
   # The following adds the Dart code generator package to your dev dependencies
   ffi: ^1.1.2
   path_provider: ^2.0.14
-  file_picker: ^4.1.4
+  filesystem_picker: ^3.0.0
   permission_handler: ^8.1.4
 
 # For information on the generic Dart part of this file, see the

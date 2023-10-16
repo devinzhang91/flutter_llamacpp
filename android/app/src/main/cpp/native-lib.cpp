@@ -23,7 +23,7 @@ const int output_buff_szie = 4 * 1024;
 char* output_buff;
 gpt_params params;
 
-ATTRIBUTES int llamacpp_init(char* model_path){
+ATTRIBUTES int llamacpp_init(char* model_path, float top_p = 0.5f, float temp=0.2f){
     __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, "[%s]: %s", __func__, model_path);
     params.model = std::string(model_path);
 
@@ -36,6 +36,9 @@ ATTRIBUTES int llamacpp_init(char* model_path){
         model = nullptr;
         delete [] output_buff;
     }
+    // set default params
+    params.top_p = 0.5;
+    params.temp = 0.2;
     // init LLM
     llama_backend_init(params.numa);
     // initialize the model
