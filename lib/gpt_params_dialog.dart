@@ -22,12 +22,22 @@ class _GPTParamsDialogState extends State<GPTParamsDialog> {
   double _topP = 0.8;
   double _temperature = 0.2;
   int _token = 64;
-  String _modelPath = '/sdcard/';
+  String _modelPath = '';
 
   Future<void> _selcetModel() async {
-    // 显示文件选择器    // for android Directory 
-    Directory appDocDir = await Directory("/sdcard/").create(recursive: true);
-
+    Directory appDocDir = await getApplicationDocumentsDirectory();
+    if (Platform.isLinux) {
+      print('Running on Linux');
+    } else if (Platform.isMacOS) {
+      print('Running on macOS');
+    } else if (Platform.isWindows) {
+      print('Running on Windows');
+    } else if (Platform.isAndroid) {
+      print('Running on Android');
+      appDocDir = await Directory('/sdcard/');
+    } else {
+      print('Unknown platform');
+    }
     // ignore: use_build_context_synchronously
     var result = await FilesystemPicker.open( allowedExtensions: [".gguf"],
                                               context: context,
