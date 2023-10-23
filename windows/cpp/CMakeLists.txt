@@ -15,8 +15,13 @@ project("llamacpp")
 # add_subdirectory(CLBlast)
 
 set(FLUTTER_PROJECT_ROOT ../..)
-set(CMAKE_SKIP_INSTALL_ALL_DEPENDENCY TRUE)
-# set(CMAKE_SKIP_INSTALL_RULES TRUE)
+# set(LLAMA_AVX512 ON)
+# set(LLAMA_AVX512_VBMI ON)
+# set(LLAMA_AVX512_VNNI ON)
+set(LLAMA_AVX ON)
+set(LLAMA_AVX2 ON)
+set(LLAMA_FMA ON)
+set(LLAMA_F16C ON)
 
 add_subdirectory(${FLUTTER_PROJECT_ROOT}/llama.cpp ${CMAKE_CURRENT_BINARY_DIR}/llama.cpp)
 include_directories(${FLUTTER_PROJECT_ROOT}/llama.cpp)
@@ -47,3 +52,5 @@ target_link_libraries(llamacpp
         # List libraries link to the target library
         llama
         ggml_static)
+
+install(TARGETS llamacpp LIBRARY )
