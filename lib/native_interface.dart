@@ -40,7 +40,7 @@ class llamacpp_native{
   final int _maxToken = 64;
   
   static final dylib = ffi.DynamicLibrary.open(
-    '${Platform.isWindows ? '' : 'lib'}llamacpp${Platform.isWindows ? '.dll' : '.so'}',
+    '${Platform.isWindows ? '' : 'lib'}llamacpp${Platform.isWindows ? '.dll' : (Platform.isMacOS ? '.dylib' : '.so')}',
   );
 
   static void test_native() {
